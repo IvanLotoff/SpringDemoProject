@@ -1,6 +1,11 @@
 package com.example.demo.exceptions;
 
-public class IncorrectClientsIdException extends Throwable {
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+@ResponseStatus(code = HttpStatus.BAD_REQUEST)
+public class IncorrectClientsIdException extends RuntimeException {
     public IncorrectClientsIdException(String s) {
+        super(s);
     }
 }

@@ -1,5 +1,9 @@
 package com.example.demo.controllers;
 
+import com.example.demo.exceptions.ClientNotFoundException;
+import com.example.demo.exceptions.ClientsDatabaseEmptyException;
+import com.example.demo.exceptions.IncorrectClientsIdException;
+import com.example.demo.exceptions.UserAlreadyExists;
 import com.example.demo.models.Client;
 import com.example.demo.models.Profit;
 import com.example.demo.repositories.ClientsRepository;
@@ -13,6 +17,7 @@ import org.springframework.data.domain.Example;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -40,20 +45,17 @@ public class RestController {
             @ApiResponse(code = 400, message = "The user already exists")
     })
     @PostMapping("/saveClient")
-    public ResponseEntity<? super Client> saveClient(@RequestBody Client client) {
+    public ResponseEntity<Client> saveClient(@RequestBody Client client) {
         /**
          * Проверим наличия этого элемента в монго дб, мы не знаем его ID, поэтому придется
          * искать обходные пути
          */
-        try {
-            if (repository.exists(Example.of(client)))
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("This user already exists");
-            client = repository.insert(client);
-            log.info("Saved client = " + client);
-            return ResponseEntity.status(HttpStatus.CREATED).body(client);
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-        }
+        if (repository.exists(Example.of(client)))
+            //throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The user already exists"); <--- тоже самое по смыслу, что ниже
+            throw new UserAlreadyExists(String.format("The user: %s already exists", client));
+        client = repository.insert(client);
+        log.info("Saved client = " + client);
+        return ResponseEntity.status(HttpStatus.CREATED).body(client);
     }
 
     /**
@@ -66,15 +68,12 @@ public class RestController {
             @ApiResponse(code = 200, message = "Data successfully fetched!"),
             @ApiResponse(code = 400, message = "Clients Database is empty")
     })
-    public ResponseEntity<? super List<Client>> getAllClients() {
-        try {
-            List<Client> clients = repository.findAll();
-            if (clients.isEmpty())
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("The Clients database is empty");
-            return ResponseEntity.status(HttpStatus.OK).body(clients);
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-        }
+    public ResponseEntity<List<Client>> getAllClients() {
+        List<Client> clients = repository.findAll();
+        if (clients.isEmpty())
+            throw new ClientsDatabaseEmptyException("Clients Database is empty");
+        log.info("get all clients");
+        return ResponseEntity.status(HttpStatus.OK).body(clients);
     }
 
     /**
@@ -88,15 +87,11 @@ public class RestController {
             @ApiResponse(code = 200, message = "Client is successfully found"),
             @ApiResponse(code = 400, message = "Incorrect client's ID")
     })
-    public ResponseEntity<? super Client> getClientById(@PathVariable String id) {
-        try {
-            Optional<Client> possibleClient = repository.findById(id);
-            if (possibleClient.isEmpty())
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Incorrect client's ID");
-            return ResponseEntity.status(HttpStatus.OK).body(possibleClient.get());
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-        }
+    public ResponseEntity<Client> getClientById(@PathVariable String id) {
+        Client possibleClient = repository.findById(id)
+                .orElseThrow(() -> new IncorrectClientsIdException("Incorrect client's ID " + id));
+        log.info("get client by id");
+        return ResponseEntity.status(HttpStatus.OK).body(possibleClient);
     }
 
     /**
@@ -114,48 +109,39 @@ public class RestController {
             @ApiResponse(code = 200, message = "Clients successfully found!"),
             @ApiResponse(code = 400, message = "Client with given parameters not found")
     })
-    public ResponseEntity<? super List<Client>> getClientByParameter(
+    public ResponseEntity<List<Client>> getClientByParameter(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String address,
             @RequestParam(required = false) Boolean isVIPclient,
             @RequestParam(required = false) Integer purchasesMadeSoFar) {
-        try {
-            Client example = Client.builder()
-                    .name(name)
-                    .address(address)
-                    .isVIPclient(isVIPclient)
-                    .purchasesMadeSoFar(purchasesMadeSoFar)
-                    .build();
-            List<Client> clients = repository.findAll(Example.of(example));
-            if (clients.isEmpty())
-                ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Entity with parameters " + example + " not found");
-            return ResponseEntity.status(HttpStatus.OK).body(clients);
-        }catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-        }
+        Client example = Client.builder()
+                .name(name)
+                .address(address)
+                .isVIPclient(isVIPclient)
+                .purchasesMadeSoFar(purchasesMadeSoFar)
+                .build();
+        List<Client> clients = repository.findAll(Example.of(example));
+        if (clients.isEmpty())
+            throw new ClientNotFoundException("Entity with parameters " + example + " not found");
+        return ResponseEntity.status(HttpStatus.OK).body(clients);
     }
 
     @ApiResponses(value = {
             @ApiResponse(code = 200, message = "Profit was successfully calculated and converted into dollars and euros"),
-            @ApiResponse(code = 400, message = "Something went wrong, see response body for details")
     })
     @GetMapping("/getProfit")
-    public ResponseEntity<? super Profit> getProfit() {
-        try {
-            List<Client> clients = repository.findAll();
-            double profitEstimate = clients.stream()
-                    .mapToDouble(client -> client.getIsVIPclient()
-                            ? 2000 * client.getPurchasesMadeSoFar()
-                            : 1000 * client.getPurchasesMadeSoFar())
-                    .sum();
-            Profit profit = Profit.builder()
-                    .inRubles(profitEstimate)
-                    .inDollars(converter.toDollars(profitEstimate))
-                    .inEuros(converter.toEuro(profitEstimate))
-                    .build();
-            return ResponseEntity.status(HttpStatus.OK).body(profit);
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-        }
+    public ResponseEntity<Profit> getProfit() {
+        List<Client> clients = repository.findAll();
+        double profitEstimate = clients.stream()
+                .mapToDouble(client -> client.getIsVIPclient()
+                        ? 2000 * client.getPurchasesMadeSoFar()
+                        : 1000 * client.getPurchasesMadeSoFar())
+                .sum();
+        Profit profit = Profit.builder()
+                .inRubles(profitEstimate)
+                .inDollars(converter.toDollars(profitEstimate))
+                .inEuros(converter.toEuro(profitEstimate))
+                .build();
+        return ResponseEntity.status(HttpStatus.OK).body(profit);
     }
 }

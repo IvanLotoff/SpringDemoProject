@@ -1,2 +1,15 @@
-package com.example.demo.exceptions;public class UserAlreadyExists {
+package com.example.demo.exceptions;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+/**
+ * Исключение, которое бросается при попытке вставить
+ * уже существующего пользователя
+ */
+@ResponseStatus(value = HttpStatus.BAD_REQUEST)
+public class UserAlreadyExists extends RuntimeException {
+    public UserAlreadyExists(String message) {
+        super(message);
+    }
 }
