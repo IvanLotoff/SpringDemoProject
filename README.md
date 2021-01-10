@@ -11,7 +11,7 @@
 2) JPA repository
 3) Swagger docs
 4) RestContoller (Post and Get requests)
-5) Синхронный запрос https://www.cbr-xml-daily.ru/daily_json.js для получения данных о курсе валют 
+5) Синхронный запрос (RestTemplate) https://www.cbr-xml-daily.ru/daily_json.js для получения данных о курсе валют 
 6) Работа с json (атрибуты, небольшая кастомизация)
 7) Кастомизированные исключения (с указанием кода ошибки)
 8) lombok 
